@@ -2,9 +2,10 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use serde::{Deserialize, Serialize};
-use sled::{Db};
+use sled::{Db, Tree};
 use std::sync::Mutex;
 use tauri::api::path::app_data_dir;
+use tauri::State;
 
 #[derive(Serialize, Deserialize, Debug)]
 struct MyData {
@@ -18,19 +19,21 @@ struct AppState {
 }
 
 #[tauri::command]
-fn insert_data(state: tauri::State<AppState>, data: MyData) -> Result<(), String> {
+fn insert_data(state: State<AppState>, tree_name: String, data: MyData) -> Result<(), String> {
     let db = state.db.lock().map_err(|_| "DB lock error")?;
+    let tree: Tree = db.open_tree(tree_name).map_err(|_| "Tree open error")?;
     let key = data.id.to_string();
     let value = serde_json::to_vec(&data).map_err(|_| "Serialization error")?;
-    db.insert(key, value).map_err(|_| "DB insert error")?;
+    tree.insert(key, value).map_err(|_| "Tree insert error")?;
     Ok(())
 }
 
 #[tauri::command]
-fn get_data(state: tauri::State<AppState>, id: u32) -> Result<String, String> {
+fn get_data(state: State<AppState>, tree_name: String, id: u32) -> Result<String, String> {
     let db = state.db.lock().map_err(|_| "DB lock error")?;
+    let tree: Tree = db.open_tree(tree_name).map_err(|_| "Tree open error")?;
     let key = id.to_string();
-    if let Some(value) = db.get(key).map_err(|_| "DB get error")? {
+    if let Some(value) = tree.get(key).map_err(|_| "Tree get error")? {
         let data: MyData = serde_json::from_slice(&value).map_err(|_| "Deserialization error")?;
         Ok(serde_json::to_string(&data).map_err(|_| "Serialization error")?)
     } else {
