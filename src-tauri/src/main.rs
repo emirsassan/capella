@@ -41,6 +41,22 @@ fn get_data(state: State<AppState>, tree_name: String, id: u32) -> Result<String
     }
 }
 
+#[tauri::command]
+fn get_all_data(state: State<AppState>, tree_name: String) -> Result<String, String> {
+    let db = state.db.lock().map_err(|_| "DB lock error")?;
+    let tree: Tree = db.open_tree(tree_name).map_err(|_| "Tree open error")?;
+    
+    let mut all_data = Vec::new();
+    
+    for item in tree.iter() {
+        let (key, value) = item.map_err(|_| "Tree iteration error")?;
+        let data: MyData = serde_json::from_slice(&value).map_err(|_| "Deserialization error")?;
+        all_data.push(data);
+    }
+
+    serde_json::to_string(&all_data).map_err(|_| "Serialization error".into())
+}
+
 fn main() {
     let app_data_dir = app_data_dir(&tauri::Config::default()).expect("AppData directory not found").join("capella_data");
     std::fs::create_dir_all(&app_data_dir).expect("Failed to create capella_data directory");
@@ -52,7 +68,7 @@ fn main() {
         .manage(AppState {
             db: Mutex::new(db),
         })
-        .invoke_handler(tauri::generate_handler![insert_data, get_data])
+        .invoke_handler(tauri::generate_handler![insert_data, get_data, get_all_data])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
